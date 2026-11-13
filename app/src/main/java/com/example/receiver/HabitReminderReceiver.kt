@@ -14,37 +14,46 @@ import java.time.format.DateTimeFormatter
 class HabitReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action != Intent.ACTION_BOOT_COMPLETED &&
+            action != NotificationHelper.ACTION_DAILY_REMINDER
+        ) {
+            return
+        }
+
         val pendingResult = goAsync()
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val db = AppDatabase.getDatabase(context)
-                val dao = db.habitDao()
-                val today = LocalDate.now()
-                val todayStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                val dayOfWeek = today.dayOfWeek.value
+                if (action == NotificationHelper.ACTION_DAILY_REMINDER) {
+                    val db = AppDatabase.getDatabase(context)
+                    val dao = db.habitDao()
+                    val today = LocalDate.now()
+                    val todayStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    val dayOfWeek = today.dayOfWeek.value
 
-                val activeHabits = dao.getAllActiveHabitsOnce()
-                val scheduledToday = activeHabits.filter { it.isScheduledForDayOfWeek(dayOfWeek) }
-                val todayLogs = dao.getLogsForDateOnce(todayStr).associateBy { it.habitId }
+                    val activeHabits = dao.getAllActiveHabitsOnce()
+                    val scheduledToday = activeHabits.filter { it.isScheduledForDayOfWeek(dayOfWeek) }
+                    val todayLogs = dao.getLogsForDateOnce(todayStr).associateBy { it.habitId }
 
-                val pendingHabitTitles = scheduledToday
-                    .filter { habit ->
-                        val log = todayLogs[habit.id]
-                        log == null || !log.isCompleted
-                    }
-                    .map { it.title }
+                    val pendingHabitTitles = scheduledToday
+                        .filter { habit ->
+                            val log = todayLogs[habit.id]
+                            log == null || !log.isCompleted
+                        }
+                        .map { it.title }
 
-                val completedCount = scheduledToday.size - pendingHabitTitles.size
+                    val completedCount = scheduledToday.size - pendingHabitTitles.size
 
-                NotificationHelper.showDailyReminderNotification(
-                    context = context,
-                    pendingHabits = pendingHabitTitles,
-                    completedCount = completedCount,
-                    totalCount = scheduledToday.size
-                )
+                    NotificationHelper.showDailyReminderNotification(
+                        context = context,
+                        pendingHabits = pendingHabitTitles,
+                        completedCount = completedCount,
+                        totalCount = scheduledToday.size
+                    )
+                }
 
-                // Reschedule for next day using saved preferences
+                // Reschedule for next day (on both daily alarm firing and device boot)
                 val prefs = context.getSharedPreferences(
                     NotificationHelper.PREFS_NAME,
                     Context.MODE_PRIVATE

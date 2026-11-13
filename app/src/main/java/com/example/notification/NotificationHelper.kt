@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.example.MainActivity
 import com.example.R
 import com.example.receiver.HabitReminderReceiver
@@ -59,11 +60,11 @@ object NotificationHelper {
 
         // Save preferences
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putBoolean(KEY_REMINDERS_ENABLED, true)
-            .putInt(KEY_REMINDER_HOUR, hour)
-            .putInt(KEY_REMINDER_MINUTE, minute)
-            .apply()
+        prefs.edit {
+            putBoolean(KEY_REMINDERS_ENABLED, true)
+            putInt(KEY_REMINDER_HOUR, hour)
+            putInt(KEY_REMINDER_MINUTE, minute)
+        }
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
@@ -91,20 +92,11 @@ object NotificationHelper {
         }
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
-                )
-            } else {
-                alarmManager.setRepeating(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    AlarmManager.INTERVAL_DAY,
-                    pendingIntent
-                )
-            }
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
         } catch (_: SecurityException) {
             // Fallback for devices restricting exact alarms
             alarmManager.set(
@@ -117,7 +109,7 @@ object NotificationHelper {
 
     fun cancelDailyReminder(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_REMINDERS_ENABLED, false).apply()
+        prefs.edit { putBoolean(KEY_REMINDERS_ENABLED, false) }
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, HabitReminderReceiver::class.java).apply {
