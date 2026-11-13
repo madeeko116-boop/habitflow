@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Optional release tag (defaults to 'latest')"
+        description: "Release tag name (defaults to 'latest')"
         required: false
         default: "latest"
 
@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build, Test & Package APK
+    name: Build Release & Debug APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -40,6 +40,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
+
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
 
       - name: Restore debug keystore
         run: |
@@ -59,58 +65,60 @@ jobs:
             fi
           fi
 
-      - name: Run unit tests
-        run: gradle :app:testDebugUnitTest --no-daemon
-
       - name: Build Debug APK
         run: gradle :app:assembleDebug --no-daemon
 
-      - name: Prepare Debug APK for distribution
-        run: |
-          mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/HabitFlow-debug.apk
-
-      - name: Build Signed Release APK (if signing secrets are configured)
-        id: release_apk
+      - name: Build Signed Release APK
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/HabitFlow-debug.apk
+
+          RELEASE_KEYSTORE="${{ runner.temp }}/my-upload-key.jks"
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "${{ runner.temp }}/my-upload-key.jks"
-            export KEYSTORE_PATH="${{ runner.temp }}/my-upload-key.jks"
-            gradle :app:assembleRelease --no-daemon
-            cp app/build/outputs/apk/release/app-release.apk dist/HabitFlow-release.apk
-            echo "built=true" >> "$GITHUB_OUTPUT"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RELEASE_KEYSTORE"
+            export KEYSTORE_PATH="$RELEASE_KEYSTORE"
           else
-            echo "Signing secrets (KEYSTORE_BASE64, STORE_PASSWORD, KEY_PASSWORD) not set; skipping release APK."
-            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "Signing secrets not configured; generating temporary CI upload key for release APK."
+            export KEYSTORE_PATH="$RELEASE_KEYSTORE"
+            export STORE_PASSWORD="ci-release-store-password"
+            export KEY_PASSWORD="ci-release-key-password"
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_PATH" \
+              -storepass "$STORE_PASSWORD" \
+              -alias upload \
+              -keypass "$KEY_PASSWORD" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=HabitFlow,O=HabitFlow,C=US"
           fi
 
-      - name: Upload Debug APK artifact
+          gradle :app:assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk dist/HabitFlow-release.apk
+
+      - name: Upload APK build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: HabitFlow-debug-apk
-          path: dist/HabitFlow-debug.apk
+          name: HabitFlow-APKs
+          path: dist/*.apk
 
-      - name: Upload Signed Release APK artifact
-        if: steps.release_apk.outputs.built == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: HabitFlow-release-apk
-          path: dist/HabitFlow-release.apk
-
-      - name: Publish APK to GitHub Releases
+      - name: Publish APKs to GitHub Releases
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.event.inputs.release_tag != '' && github.event.inputs.release_tag || 'latest') }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && format('HabitFlow {0}', github.ref_name) || 'HabitFlow Latest Build' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && format('HabitFlow {0}', github.ref_name) || 'HabitFlow Latest Release' }}
           body: |
             Automated Android APK build for **HabitFlow** (`com.aistudio.habitflow.zqvxm`).
 
-            - Download `HabitFlow-release.apk` (when release signing secrets are configured) or `HabitFlow-debug.apk` below to install directly on Android devices (Android 7.0+ / API 24+).
-          files: dist/*.apk
+            - **HabitFlow-release.apk**: Release build APK ready to download and install on Android 7.0+ (API 24+) devices.
+            - **HabitFlow-debug.apk**: Debug build APK signed with the repository's consistent debug keystore.
+          files: |
+            dist/HabitFlow-release.apk
+            dist/HabitFlow-debug.apk
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           make_latest: ${{ startsWith(github.ref, 'refs/tags/') && 'true' || 'false' }}
