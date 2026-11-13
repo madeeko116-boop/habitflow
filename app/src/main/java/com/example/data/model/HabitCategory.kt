@@ -1,12 +1,12 @@
 package com.example.data.model
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class HabitCategory(
@@ -25,8 +25,8 @@ enum class HabitCategory(
         return when (this) {
             HEALTH -> Icons.Default.FitnessCenter
             MINDFULNESS -> Icons.Default.SelfImprovement
-            PRODUCTIVITY -> Icons.Default.TrendingUp
-            LEARNING -> Icons.Default.MenuBook
+            PRODUCTIVITY -> Icons.AutoMirrored.Filled.TrendingUp
+            LEARNING -> Icons.AutoMirrored.Filled.MenuBook
             CREATIVITY -> Icons.Default.Brush
             LIFESTYLE -> Icons.Default.Spa
         }

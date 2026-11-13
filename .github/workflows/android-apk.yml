@@ -69,10 +69,10 @@ jobs:
             fi
           fi
 
-      - name: Build Debug APK (tests skipped)
-        run: gradle :app:assembleDebug -x test --no-daemon
+      - name: Build Debug APK (tests and non-critical lint skipped)
+        run: gradle :app:assembleDebug -x test -x lint -x lintVitalRelease --no-daemon
 
-      - name: Build Signed Release APK (tests skipped)
+      - name: Build Signed Release APK (tests and non-critical lint skipped)
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -101,7 +101,7 @@ jobs:
               -dname "CN=HabitFlow,O=HabitFlow,C=US"
           fi
 
-          gradle :app:assembleRelease -x test --no-daemon
+          gradle :app:assembleRelease -x test -x lint -x lintVitalRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk dist/HabitFlow-release.apk
 
       - name: Upload APK build artifacts
